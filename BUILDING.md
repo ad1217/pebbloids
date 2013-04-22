@@ -1,7 +1,7 @@
 Standard procedure to build:
 
 
-cd path/to/pebbloids
-<pre><code>path/to/sdk/tools/create_pebble_project.py --symlink-only path/to/sdk/sdk .</code></pre>
+<pre><code>cd path/to/pebbloids
+path/to/sdk/tools/create_pebble_project.py --symlink-only path/to/sdk/sdk .
 ./waf configure
-./waf build
+./waf build</code></pre>
