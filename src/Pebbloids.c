@@ -7,12 +7,12 @@
 PBL_APP_INFO(MY_UUID,
              "Pebbloids", "Adam Goldsmith",
              1, 0, /* App version */
-             DEFAULT_MENU_ICON,
+             RESOURCE_ID_IMAGE_MENU_ICON,
              APP_INFO_STANDARD_APP);
 
 Window window, gameOver;
 Layer layer, scoreInfo, gameOverLayer;
-int score=0, level=0, asteroidNum=0;
+int score=0, level=0, asteroidNum=0, asteroidSize=7, safetyBox=10;
 AppTimerHandle timer_handle;
 BmpContainer shipBmp;
 const int maxSpeed=5;
@@ -39,11 +39,11 @@ void levelUp(){
     level++;
     asteroidNum=level+1;
     for(int i=0;i<level+1;i++){
-        asteroids[i].speed.x=random(maxSpeed*1.5)-maxSpeed;
-        asteroids[i].speed.y=random(maxSpeed*1.5)-maxSpeed;
-        asteroids[i].pos.x=random(144);
-        asteroids[i].pos.y=random(168);
-        asteroids[i].size=random(2)*5;
+        asteroids[i].speed.x=random(maxSpeed)-maxSpeed/2;
+        asteroids[i].speed.y=random(maxSpeed)-maxSpeed/2;
+        asteroids[i].pos.x=random(2)==1?random(ship.pos.x-safetyBox):random(144-(ship.pos.x+21+safetyBox))+(ship.pos.x+21+safetyBox);
+        asteroids[i].pos.y=random(2)==1?random(ship.pos.y-safetyBox):random(168-(ship.pos.y+21+safetyBox))+(ship.pos.y+21+safetyBox);
+        asteroids[i].size=random(3)*asteroidSize*2;
     }
     layer_mark_dirty(&scoreInfo);
 }
@@ -63,30 +63,30 @@ void reset(){
     window_stack_pop(true);
 }
 
-object fire(){
+object fire(object (*shooter)){
     object obj;
-    if(ship.dir>=315||ship.dir<90){
-        obj.pos.y=ship.pos.y-ship.size/2;
+    if((*shooter).dir>=315||(*shooter).dir<90){
+        obj.pos.y=(*shooter).pos.y-(*shooter).size/2;
         obj.speed.y=-maxSpeed;
     }
-    else if(ship.dir>=135&&ship.dir<=225){
-        obj.pos.y=ship.pos.y+ship.size/2;
+    else if((*shooter).dir>=135&&(*shooter).dir<=225){
+        obj.pos.y=(*shooter).pos.y+(*shooter).size/2;
         obj.speed.y=maxSpeed;
     }
     else{
-        obj.pos.y=ship.pos.y;
+        obj.pos.y=(*shooter).pos.y;
         obj.speed.y=0;
     }
-    if(ship.dir>=45&&ship.dir<=135){
-        obj.pos.x=ship.pos.x+ship.size/2;
+    if((*shooter).dir>=45&&(*shooter).dir<=135){
+        obj.pos.x=(*shooter).pos.x+(*shooter).size/2;
         obj.speed.x=maxSpeed;
     }
-    else if(ship.dir>=225&&ship.dir<=315){
-        obj.pos.x=ship.pos.x-ship.size/2;
+    else if((*shooter).dir>=225&&(*shooter).dir<=315){
+        obj.pos.x=(*shooter).pos.x-(*shooter).size/2;
         obj.speed.x=-maxSpeed;
     }
     else{
-        obj.pos.x=ship.pos.x;
+        obj.pos.x=(*shooter).pos.x;
         obj.speed.x=0;
     }
     obj.size=3;
@@ -95,13 +95,11 @@ object fire(){
 
 void up_click_handler(ClickRecognizerRef recognizer, Window *window) {
     ship.dir=(ship.dir+45)%360;
-    layer_mark_dirty(&layer);
 }
 
 void down_click_handler(ClickRecognizerRef recognizer, Window *window) {
     ship.dir=(ship.dir-45)%360;
     ship.dir=ship.dir<0?360+ship.dir:ship.dir;
-    layer_mark_dirty(&layer);
 }
 
 void select_long_click_handler(ClickRecognizerRef recognizer, Window *window) {
@@ -109,11 +107,10 @@ void select_long_click_handler(ClickRecognizerRef recognizer, Window *window) {
     else if(ship.dir>=135&&ship.dir<=225&&ship.speed.y<maxSpeed) ship.speed.y++;
     if(ship.dir>=45&&ship.dir<=135&&ship.speed.x<maxSpeed) ship.speed.x++;
     else if(ship.dir>=225&&ship.dir<=315&&ship.speed.x>-maxSpeed) ship.speed.x--;
-    layer_mark_dirty(&layer);
 }
 
 void select_click_handler(ClickRecognizerRef recognizer, Window *window){
-    bullet=fire();
+    bullet=fire(&ship);
 }
 
 void select_click_handler_gameOver(ClickRecognizerRef recognizer, Window *window){
@@ -154,7 +151,7 @@ void updateObject(GContext* ctx, object *obj){
 
 int detectCollision(object *obj, int lastObj){
     for(int i=lastObj>-1?lastObj:0;i<asteroidNum;i++){
-        if(((*obj).pos.x-(*obj).size/2<asteroids[i].pos.x+asteroids[i].size/2)&&((*obj).pos.x+(*obj).size/2>asteroids[i].pos.x-asteroids[i].size/2)&&((*obj).pos.y-(*obj).size/2<asteroids[i].pos.y+asteroids[i].size/2)&&((*obj).pos.y+(*obj).size/2>asteroids[i].pos.y-asteroids[i].size/2)) return i;
+        if(((*obj).pos.x-(*obj).size<asteroids[i].pos.x+asteroids[i].size/2)&&((*obj).pos.x+(*obj).size/2>asteroids[i].pos.x-asteroids[i].size/2)&&((*obj).pos.y-(*obj).size/2<asteroids[i].pos.y+asteroids[i].size/2)&&((*obj).pos.y+(*obj).size/2>asteroids[i].pos.y-asteroids[i].size/2)) return i;
     }
     return -1;
 }
@@ -165,15 +162,25 @@ void update_layer_callback(Layer *me, GContext* ctx){
     updateObject(ctx, &bullet);
     for(int i=0;i<asteroidNum;i++){
         updateObject(ctx, &asteroids[i]);
-        graphics_fill_circle(ctx,asteroids[i].pos,asteroids[i].size);
+        graphics_fill_circle(ctx,asteroids[i].pos,asteroids[i].size/2);
     }
     if(bullet.size>0){
         int asteroidHit=detectCollision(&bullet, -1);
         if(asteroidHit>-1){
             score++;
-            asteroidNum--;
+            int newAsteroids=0;
+            object tempAsteroidHit=asteroids[asteroidHit];
+            if(asteroidHit<asteroidNum){
+                for(int i=asteroidHit;i<asteroidNum;i++){
+                    asteroids[i]=asteroids[i+1];
+                }
+            }
+            for(int i=0;i<tempAsteroidHit.size/(asteroidSize*4)*2;i++){
+                asteroids[asteroidNum+i-1]=setObject(0,asteroidSize*2,(GPoint){(random(maxSpeed/2)-maxSpeed/4),(random(maxSpeed/2)-maxSpeed/4)},(GPoint){(tempAsteroidHit.pos.x+random(4)-2),(tempAsteroidHit.pos.y+random(4)-2)});
+                newAsteroids++;
+            }
+            asteroidNum=asteroidNum+newAsteroids-1;
             layer_mark_dirty(&scoreInfo);
-            asteroids[asteroidHit]=setObject(0,0,(GPoint){0,0},(GPoint){0,0});
         }
         graphics_context_set_stroke_color(ctx, GColorBlack);
         graphics_draw_circle(ctx,bullet.pos, bullet.size);
@@ -259,10 +266,10 @@ void handle_init(AppContextRef ctx) {
     window_set_click_config_provider(&gameOver, (ClickConfigProvider) config_provider_gameOver);
     timer_handle = app_timer_send_event(ctx, 50, 1);
     gpath_init(&ship_path, &SHIP_SHAPE);
-    levelUp();
     PblTm time;
     get_time(&time);
     seed=time.tm_hour*3600+time.tm_min*60+time.tm_sec;
+    levelUp();
 }
 
 
